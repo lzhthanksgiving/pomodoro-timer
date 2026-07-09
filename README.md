@@ -44,20 +44,9 @@ npm install
 npm start
 ```
 
-## 打包
+## 下载
 
-生成 Windows 安装包需要 NSIS。由于网络限制，electron-builder 可能无法自动下载 NSIS，需手动下载：
-
-1. 下载 NSIS：https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z
-2. 解压到本地目录（如 `C:\nsis`）
-3. 设置环境变量后打包：
-
-```bash
-# 生成 Windows 安装包
-ELECTRON_BUILDER_NSIS_DIR="C:\nsis" npx electron-builder --win nsis
-```
-
-安装包输出在 `release/` 目录下。
+最新版本：[v1.0.1 安装包](https://github.com/lzhthanksgiving/pomodoro-timer/releases/latest)
 
 ## 许可证
 
