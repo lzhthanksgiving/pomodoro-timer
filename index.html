@@ -7,26 +7,35 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
-    <div class="title">番茄钟</div>
+  <main class="app">
+    <header class="title-row"><div class="title">番茄钟</div><button class="icon-btn" id="open-settings" aria-label="设置" title="设置">⚙</button></header>
     <div class="mode-label work" id="mode-label">🍅 专注</div>
-
     <div class="timer-container">
-      <svg width="240" height="240" viewBox="0 0 240 240">
-        <circle class="ring-bg" cx="120" cy="120" r="106" />
-        <circle class="ring-progress" id="ring-progress" cx="120" cy="120" r="106" />
-      </svg>
+      <svg width="240" height="240" viewBox="0 0 240 240"><circle class="ring-bg" cx="120" cy="120" r="106"/><circle class="ring-progress" id="ring-progress" cx="120" cy="120" r="106"/></svg>
       <div class="time-display" id="timer-display">25:00</div>
     </div>
+    <div class="buttons"><button class="btn btn-secondary" id="reset-btn">重置</button><button class="btn btn-primary" id="start-btn">开始</button></div>
+    <div class="session-count">已完成 <span id="session-count">0</span> 个番茄</div>
+  </main>
 
-    <div class="buttons">
-      <button class="btn btn-secondary" id="reset-btn">重置</button>
-      <button class="btn btn-primary" id="start-btn">开始</button>
-    </div>
+  <div class="overlay" id="settings-overlay" hidden>
+    <section class="panel settings-panel" role="dialog" aria-modal="true" aria-label="设置">
+      <header class="panel-header"><h2>设置</h2><button class="close-btn" id="close-settings" aria-label="关闭">×</button></header>
+      <section class="setting-section"><h3>提示音</h3><div class="sound-row"><button class="small-btn" id="choose-sound">选择音频文件</button><span id="sound-name">默认提示音</span></div><audio id="custom-sound"></audio></section>
+      <button class="record-link" id="open-calendar"><span><strong>每日专注记录</strong><small>点击查看日历与历史记录</small></span><span class="chevron">›</span></button>
+      <section class="setting-section"><h3>当前倒计时</h3><div class="slider-label"><span>剩余时间</span><strong id="slider-time">25:00</strong></div><input id="time-slider" type="range" min="0" max="1500" value="1500" aria-label="调整当前剩余时间"><div class="hint">暂停后拖动调整</div></section>
+      <section class="setting-section"><h3>专注与休息时长</h3><div class="duration-row"><label>专注 <span><input id="work-minutes" type="number" min="1" max="120" step="1"> 分钟</span></label><label>休息 <span><input id="break-minutes" type="number" min="1" max="60" step="1"> 分钟</span></label></div><button class="save-btn" id="save-durations">保存时长</button><div id="settings-message" role="status">专注 1–120 分钟 · 休息 1–60 分钟</div></section>
+    </section>
+  </div>
 
-    <div class="session-count">
-      已完成 <span id="session-count">0</span> 个番茄
-    </div>
+  <div class="overlay" id="calendar-overlay" hidden>
+    <section class="panel calendar-panel" role="dialog" aria-modal="true" aria-label="每日专注日历">
+      <header class="panel-header"><button class="back-btn" id="back-settings">‹ 设置</button><h2>专注日历</h2><button class="close-btn" id="close-calendar" aria-label="关闭">×</button></header>
+      <div class="calendar-nav"><button id="prev-month" aria-label="上个月">‹</button><strong id="month-title"></strong><button id="next-month" aria-label="下个月">›</button></div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <div class="calendar-detail" id="calendar-detail"></div>
+      <div class="calendar-legend"><i></i> 当天完成的番茄数</div>
+    </section>
   </div>
 
   <script src="renderer.js"></script>

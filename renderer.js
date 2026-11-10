@@ -1,46 +1,57 @@
-// 番茄钟核心逻辑
-const WORK_TIME = 25 * 60;   // 25分钟
-const BREAK_TIME = 5 * 60;   // 5分钟
+const DEFAULT_WORK_MINUTES = 25;
+const DEFAULT_BREAK_MINUTES = 5;
+let WORK_TIME = DEFAULT_WORK_MINUTES * 60;
+let BREAK_TIME = DEFAULT_BREAK_MINUTES * 60;
+const CIRCUMFERENCE = 2 * Math.PI * 106;
 
-const CIRCUMFERENCE = 2 * Math.PI * 106; // 圆环周长 (r=106)
-
-// 状态
-let timerType = 'work';        // 'work' | 'break'
+let timerType = 'work';
 let timeLeft = WORK_TIME;
 let totalTime = WORK_TIME;
 let isRunning = false;
 let sessionCount = 0;
 let timerInterval = null;
+let dailyRecords = {};
+let shownMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let selectedDay = new Date();
 
-// DOM 元素
 const timerDisplay = document.getElementById('timer-display');
 const modeLabel = document.getElementById('mode-label');
 const startBtn = document.getElementById('start-btn');
 const resetBtn = document.getElementById('reset-btn');
 const ringProgress = document.getElementById('ring-progress');
 const sessionSpan = document.getElementById('session-count');
-const tickSound = document.getElementById('tick-sound');
-const doneSound = document.getElementById('done-sound');
+const customSound = document.getElementById('custom-sound');
+const soundName = document.getElementById('sound-name');
+const timeSlider = document.getElementById('time-slider');
+const sliderTime = document.getElementById('slider-time');
+const settingsOverlay = document.getElementById('settings-overlay');
+const calendarOverlay = document.getElementById('calendar-overlay');
 
-// 初始化圆环
-ringProgress.style.strokeDasharray = CIRCUMFERENCE;
-ringProgress.style.strokeDashoffset = '0';
+function localDay(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  const safeSeconds = Math.max(0, seconds);
+  return `${String(Math.floor(safeSeconds / 60)).padStart(2, '0')}:${String(safeSeconds % 60).padStart(2, '0')}`;
+}
+
+function updateSlider() {
+  timeSlider.max = totalTime;
+  timeSlider.value = timeLeft;
+  timeSlider.disabled = isRunning;
+  sliderTime.textContent = formatTime(timeLeft);
 }
 
 function updateDisplay() {
   timerDisplay.textContent = formatTime(timeLeft);
-  document.title = formatTime(timeLeft) + ' - ' + (timerType === 'work' ? '专注' : '休息');
+  document.title = `${formatTime(timeLeft)} - ${timerType === 'work' ? '专注' : '休息'}`;
+  updateSlider();
 }
 
 function updateRing() {
   const progress = 1 - (timeLeft / totalTime);
-  const offset = CIRCUMFERENCE * (1 - progress);
-  ringProgress.style.strokeDashoffset = offset;
+  ringProgress.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
 }
 
 function updateModeLabel() {
@@ -55,116 +66,179 @@ function updateModeLabel() {
   }
 }
 
-function switchMode() {
-  if (timerType === 'work') {
-    timerType = 'break';
-    timeLeft = BREAK_TIME;
-    totalTime = BREAK_TIME;
-  } else {
-    timerType = 'work';
-    timeLeft = WORK_TIME;
-    totalTime = WORK_TIME;
-  }
-  updateModeLabel();
-  updateDisplay();
-  updateRing();
+function updateStartButton() {
+  startBtn.textContent = isRunning ? '暂停' : '开始';
+  startBtn.className = isRunning ? 'btn btn-primary pause' : 'btn btn-primary';
+  updateSlider();
 }
 
-function tick() {
-  timeLeft--;
-  updateDisplay();
-  updateRing();
+function renderCalendar() {
+  const year = shownMonth.getFullYear();
+  const month = shownMonth.getMonth();
+  document.getElementById('month-title').textContent = `${year}年${month + 1}月`;
+  const grid = document.getElementById('calendar-grid');
+  grid.innerHTML = '';
+  ['一', '二', '三', '四', '五', '六', '日'].forEach(day => {
+    grid.insertAdjacentHTML('beforeend', `<div class="weekday">${day}</div>`);
+  });
 
-  if (timeLeft <= 0) {
-    clearInterval(timerInterval);
-    isRunning = false;
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let i = 0; i < offset; i++) grid.insertAdjacentHTML('beforeend', '<div class="calendar-date empty"></div>');
 
-    if (timerType === 'work') {
-      sessionCount++;
-      sessionSpan.textContent = sessionCount;
-    }
-
-    // 播放完成音效
-    playDoneSound();
-
-    // 切换到下一个模式
-    switchMode();
-
-    // 自动开始下一轮
-    startTimer();
-    updateStartButton();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const count = dailyRecords[localDay(date)] || 0;
+    const selected = localDay(date) === localDay(selectedDay);
+    grid.insertAdjacentHTML('beforeend', `<button class="calendar-date ${count ? 'has-record' : ''} ${selected ? 'selected' : ''}" data-day="${day}"><span>${day}</span>${count ? `<small>${count}个</small>` : ''}</button>`);
   }
+
+  grid.querySelectorAll('[data-day]').forEach(button => {
+    button.addEventListener('click', () => {
+      selectedDay = new Date(year, month, Number(button.dataset.day));
+      renderCalendar();
+    });
+  });
+  const count = dailyRecords[localDay(selectedDay)] || 0;
+  document.getElementById('calendar-detail').innerHTML = `<span>${selectedDay.getMonth() + 1}月${selectedDay.getDate()}日</span><strong>${count} 个番茄</strong>`;
 }
 
 function playDoneSound() {
-  // 使用 Web Audio API 生成叮咚音效
+  if (customSound.src) {
+    customSound.currentTime = 0;
+    customSound.play().catch(() => {});
+    return;
+  }
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const notes = timerType === 'work' ? [523.25, 659.25, 783.99] : [783.99, 659.25, 523.25];
-
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
+    notes.forEach((frequency, index) => {
+      const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.2);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.2 + 0.4);
-      osc.start(ctx.currentTime + i * 0.2);
-      osc.stop(ctx.currentTime + i * 0.2 + 0.4);
+      oscillator.connect(gain); gain.connect(ctx.destination);
+      oscillator.type = 'sine'; oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + index * 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + index * 0.2 + 0.4);
+      oscillator.start(ctx.currentTime + index * 0.2);
+      oscillator.stop(ctx.currentTime + index * 0.2 + 0.4);
     });
-  } catch (e) {
-    // 静默处理
-  }
+  } catch {}
 }
 
 function startTimer() {
   if (isRunning) return;
   isRunning = true;
   timerInterval = setInterval(tick, 1000);
+  updateStartButton();
 }
 
 function pauseTimer() {
   if (!isRunning) return;
   clearInterval(timerInterval);
   isRunning = false;
-}
-
-function updateStartButton() {
-  if (isRunning) {
-    startBtn.textContent = '暂停';
-    startBtn.className = 'btn btn-primary pause';
-  } else {
-    startBtn.textContent = '开始';
-    startBtn.className = 'btn btn-primary';
-  }
-}
-
-// 事件处理
-startBtn.addEventListener('click', () => {
-  if (isRunning) {
-    pauseTimer();
-  } else {
-    startTimer();
-  }
   updateStartButton();
+}
+
+function switchMode() {
+  timerType = timerType === 'work' ? 'break' : 'work';
+  totalTime = timerType === 'work' ? WORK_TIME : BREAK_TIME;
+  timeLeft = totalTime;
+  updateModeLabel(); updateDisplay(); updateRing();
+}
+
+async function tick() {
+  timeLeft--;
+  updateDisplay(); updateRing();
+  if (timeLeft > 0) return;
+  clearInterval(timerInterval);
+  isRunning = false;
+  if (timerType === 'work') {
+    dailyRecords = await window.pomodoro.recordSession();
+    sessionCount = dailyRecords[localDay()] || 0;
+    sessionSpan.textContent = sessionCount;
+    if (!calendarOverlay.hidden) renderCalendar();
+  }
+  playDoneSound();
+  switchMode();
+  startTimer();
+}
+
+document.getElementById('open-settings').addEventListener('click', () => { settingsOverlay.hidden = false; });
+document.getElementById('close-settings').addEventListener('click', () => { settingsOverlay.hidden = true; });
+document.getElementById('open-calendar').addEventListener('click', () => {
+  settingsOverlay.hidden = true;
+  selectedDay = new Date();
+  shownMonth = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), 1);
+  renderCalendar();
+  calendarOverlay.hidden = false;
+});
+document.getElementById('back-settings').addEventListener('click', () => {
+  calendarOverlay.hidden = true;
+  settingsOverlay.hidden = false;
+});
+document.getElementById('close-calendar').addEventListener('click', () => { calendarOverlay.hidden = true; });
+settingsOverlay.addEventListener('click', event => { if (event.target === settingsOverlay) settingsOverlay.hidden = true; });
+calendarOverlay.addEventListener('click', event => { if (event.target === calendarOverlay) calendarOverlay.hidden = true; });
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { settingsOverlay.hidden = true; calendarOverlay.hidden = true; }
 });
 
+document.getElementById('prev-month').addEventListener('click', () => {
+  shownMonth = new Date(shownMonth.getFullYear(), shownMonth.getMonth() - 1, 1);
+  selectedDay = new Date(shownMonth);
+  renderCalendar();
+});
+document.getElementById('next-month').addEventListener('click', () => {
+  shownMonth = new Date(shownMonth.getFullYear(), shownMonth.getMonth() + 1, 1);
+  selectedDay = new Date(shownMonth);
+  renderCalendar();
+});
+
+timeSlider.addEventListener('input', () => {
+  if (isRunning) return;
+  timeLeft = Number(timeSlider.value);
+  updateDisplay(); updateRing();
+});
+
+document.getElementById('choose-sound').addEventListener('click', async () => {
+  const chosen = await window.pomodoro.chooseSound();
+  if (chosen) { customSound.src = chosen.soundDataUrl; soundName.textContent = chosen.name; }
+});
+
+document.getElementById('save-durations').addEventListener('click', async () => {
+  const workMinutes = Number(document.getElementById('work-minutes').value);
+  const breakMinutes = Number(document.getElementById('break-minutes').value);
+  const message = document.getElementById('settings-message');
+  if (!Number.isInteger(workMinutes) || workMinutes < 1 || workMinutes > 120 || !Number.isInteger(breakMinutes) || breakMinutes < 1 || breakMinutes > 60) {
+    message.textContent = '专注需为 1–120 分钟，休息需为 1–60 分钟';
+    return;
+  }
+  await window.pomodoro.saveDurations({ workMinutes, breakMinutes });
+  WORK_TIME = workMinutes * 60; BREAK_TIME = breakMinutes * 60;
+  totalTime = timerType === 'work' ? WORK_TIME : BREAK_TIME;
+  timeLeft = Math.min(timeLeft, totalTime);
+  message.textContent = '时长已保存';
+  updateDisplay(); updateRing();
+});
+
+startBtn.addEventListener('click', () => isRunning ? pauseTimer() : startTimer());
 resetBtn.addEventListener('click', () => {
-  pauseTimer();
-  timerType = 'work';
-  timeLeft = WORK_TIME;
-  totalTime = WORK_TIME;
-  updateModeLabel();
-  updateDisplay();
-  updateRing();
-  updateStartButton();
+  pauseTimer(); timerType = 'work'; totalTime = WORK_TIME; timeLeft = WORK_TIME;
+  updateModeLabel(); updateDisplay(); updateRing(); updateStartButton();
 });
 
-// 初始化
-updateModeLabel();
-updateDisplay();
-updateRing();
-updateStartButton();
-sessionSpan.textContent = '0';
+ringProgress.style.strokeDasharray = CIRCUMFERENCE;
+updateModeLabel(); updateDisplay(); updateRing(); updateStartButton();
+
+window.pomodoro.loadData().then(data => {
+  WORK_TIME = (data.workMinutes || DEFAULT_WORK_MINUTES) * 60;
+  BREAK_TIME = (data.breakMinutes || DEFAULT_BREAK_MINUTES) * 60;
+  totalTime = timeLeft = WORK_TIME;
+  document.getElementById('work-minutes').value = WORK_TIME / 60;
+  document.getElementById('break-minutes').value = BREAK_TIME / 60;
+  dailyRecords = data.records || {};
+  sessionCount = dailyRecords[localDay()] || 0;
+  sessionSpan.textContent = sessionCount;
+  if (data.soundDataUrl) { customSound.src = data.soundDataUrl; soundName.textContent = data.soundPath.split(/[\\/]/).pop(); }
+  updateDisplay(); updateRing();
+}).catch(() => {});
